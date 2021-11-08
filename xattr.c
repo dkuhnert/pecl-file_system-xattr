@@ -21,9 +21,13 @@
 
 #define XATTR_BUFFER_SIZE	1024	/* Initial size for internal buffers, feel free to change it */
 
-/* XATTR_CREATE=1, XATTR_REPLACE=2 */
-
-#define XATTR_DONTFOLLOW (1<<2)
+#ifdef __APPLE__
+  /* XATTR_NOFOLLOW=0x0001, XATTR_CREATE=0x0002, XATTR_REPLACE=0x0004 */
+  #define XATTR_DONTFOLLOW XATTR_NOFOLLOW
+#else
+  /* XATTR_CREATE=1, XATTR_REPLACE=2 */
+  #define XATTR_DONTFOLLOW (1<<2)
+#endif
 
 #define XATTR_USER       (1<<3)
 #define XATTR_TRUSTED    (1<<4)
@@ -183,11 +187,15 @@ PHP_FUNCTION(xattr_set)
 
 	prefixed_name = add_prefix(attr_name, flags);
 	/* Attempt to set an attribute, warn if failed. */
+#ifdef __APPLE__
+  error = setxattr(path, prefixed_name, attr_value, value_len, 0, (int)(flags & (XATTR_DONTFOLLOW | XATTR_CREATE | XATTR_REPLACE)));
+#else
 	if (flags & XATTR_DONTFOLLOW) {
 		error = lsetxattr(path, prefixed_name, attr_value, (int)value_len, (int)(flags & (XATTR_CREATE | XATTR_REPLACE)));
 	} else {
 		error = setxattr(path, prefixed_name, attr_value, (int)value_len, (int)(flags & (XATTR_CREATE | XATTR_REPLACE)));
 	}
+#endif
 	if (error == -1) {
 		switch (errno) {
 			case E2BIG:
@@ -208,6 +216,9 @@ PHP_FUNCTION(xattr_set)
 				php_error(E_WARNING, "%s Attribute %s already exists", get_active_function_name(), prefixed_name);
 				break;
 			case ENODATA:
+#ifdef __APPLE__
+      case ENOATTR:
+#endif
 				php_error(E_WARNING, "%s Attribute %s doesn't exists", get_active_function_name(), prefixed_name);
 				break;
 		}
@@ -248,19 +259,27 @@ PHP_FUNCTION(xattr_get)
 	 * If buffer is too small then attr_get sets errno to E2BIG and tells us
 	 * how many bytes are required by setting buffer_size variable.
 	 */
+#ifdef __APPLE__
+  buffer_size = getxattr(path, prefixed_name, attr_value, 0, 0, (flags & (XATTR_DONTFOLLOW)));
+#else
 	if (flags & XATTR_DONTFOLLOW) {
 		buffer_size = lgetxattr(path, prefixed_name, attr_value, 0);
 	} else {
 		buffer_size = getxattr(path, prefixed_name, attr_value, 0);
 	}
+#endif
 	if (buffer_size != (size_t)-1) {
 		attr_value = emalloc(buffer_size+1);
 
+#ifdef __APPLE__
+    buffer_size = getxattr(path, prefixed_name, attr_value, buffer_size, 0, (flags & (XATTR_DONTFOLLOW)));
+#else
 		if (flags & XATTR_DONTFOLLOW) {
 			buffer_size = lgetxattr(path, prefixed_name, attr_value, buffer_size);
 		} else {
 			buffer_size = getxattr(path, prefixed_name, attr_value, buffer_size);
 		}
+#endif
 		attr_value[buffer_size] = 0;
 	}
 
@@ -278,6 +297,9 @@ PHP_FUNCTION(xattr_get)
 	/* Give warning for some common error conditions */
 	switch (errno) {
 		case ENODATA:
+#ifdef __APPLE__
+    case ENOATTR:
+#endif
 			break;
 		case ENOENT:
 		case ENOTDIR:
@@ -315,11 +337,15 @@ PHP_FUNCTION(xattr_supported)
 	}
 
 	/* Is "user.test.is.supported" a good name? */
+#ifdef __APPLE__
+  error = getxattr(path, "user.test.is.supported", buffer, 0, 0, (flags & (XATTR_DONTFOLLOW)));
+#else
 	if (flags & XATTR_DONTFOLLOW) {
 		error = lgetxattr(path, "user.test.is.supported", buffer, 0);
 	} else {
 		error = getxattr(path, "user.test.is.supported", buffer, 0);
 	}
+#endif
 
 	if (error >= 0) {
 		RETURN_TRUE;
@@ -327,6 +353,9 @@ PHP_FUNCTION(xattr_supported)
 
 	switch (errno) {
 		case ENODATA:
+#ifdef __APPLE__
+    case ENOATTR:
+#endif
 			RETURN_TRUE;
 		case ENOTSUP:
 			RETURN_FALSE;
@@ -365,11 +394,15 @@ PHP_FUNCTION(xattr_remove)
 	prefixed_name = add_prefix(attr_name, flags);
 
 	/* Attempt to remove an attribute, warn if failed. */
+#ifdef __APPLE__
+  error = removexattr(path, prefixed_name, (flags & (XATTR_DONTFOLLOW)));
+#else
 	if (flags & XATTR_DONTFOLLOW) {
 		error = lremovexattr(path, prefixed_name);
 	} else {
 		error = removexattr(path, prefixed_name);
 	}
+#endif
 	if (prefixed_name != attr_name) {
 		efree(prefixed_name);
 	}
@@ -430,11 +463,15 @@ PHP_FUNCTION(xattr_list)
 		 * Call to this function with zero size buffer will return us
 		 * required size of our buffer in return (or an error).
 		 */
+#ifdef __APPLE__
+    error = listxattr(path, buffer, 0, (flags & (XATTR_DONTFOLLOW)));
+#else
 		if (flags & XATTR_DONTFOLLOW) {
 			error = llistxattr(path, buffer, 0);
 		} else {
 			error = listxattr(path, buffer, 0);
 		}
+#endif
 
 		/* Print warning on common errors */
 		if (error == -1) {
@@ -459,11 +496,15 @@ PHP_FUNCTION(xattr_list)
 		buffer_size = error;
 		buffer = erealloc(buffer, buffer_size);
 
+#ifdef __APPLE__
+    error = listxattr(path, buffer, buffer_size, (flags & (XATTR_DONTFOLLOW)));
+#else
 		if (flags & XATTR_DONTFOLLOW) {
 			error = llistxattr(path, buffer, buffer_size);
 		} else {
 			error = listxattr(path, buffer, buffer_size);
 		}
+#endif
 
 		/*
 		 * Preceding functions may fail if extended attributes

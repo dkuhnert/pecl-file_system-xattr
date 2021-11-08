@@ -4,6 +4,7 @@ set/get/list functions and symlink
 <?php
 if (!extension_loaded("xattr")) die("skip xattr extension not loaded");
 if (!xattr_supported(__FILE__)) die("skip xattr not supported here");
+if (PHP_OS==="Darwin")          die("skip XATTR_TRUSTED not supported on macos");
 if (exec("id -u")!=="0")        die("skip need root privileges");
 ?>
 --FILE--
