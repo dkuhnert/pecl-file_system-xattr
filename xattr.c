@@ -104,12 +104,14 @@ PHP_MINIT_FUNCTION(xattr)
 
 	REGISTER_LONG_CONSTANT("XATTR_DONTFOLLOW", XATTR_DONTFOLLOW, CONST_CS | CONST_PERSISTENT);
 
+#ifndef __APPLE__
 	REGISTER_LONG_CONSTANT("XATTR_USER",       XATTR_USER,       CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("XATTR_ROOT",       XATTR_ROOT,       CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("XATTR_TRUSTED",    XATTR_TRUSTED,    CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("XATTR_SYSTEM",     XATTR_SYSTEM,     CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("XATTR_SECURITY",   XATTR_SECURITY,   CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("XATTR_ALL",        XATTR_ALL,        CONST_CS | CONST_PERSISTENT);
+#endif
 
 	return SUCCESS;
 }
@@ -128,6 +130,12 @@ PHP_MINFO_FUNCTION(xattr)
 
 #define check_prefix(flags) add_prefix(NULL, flags)
 
+#ifdef __APPLE__
+static char *add_prefix(char *name, zend_long flags) {
+  // macOS doensn't support attribute namespaces
+  return name;
+}
+#else
 static char *add_prefix(char *name, zend_long flags) {
 	char *ret;
 
@@ -164,6 +172,7 @@ static char *add_prefix(char *name, zend_long flags) {
 	}
 	return ret;
 }
+#endif;
 
 /* {{{ proto bool xattr_set(string path, string name, string value [, int flags])
    Set an extended attribute of file */
